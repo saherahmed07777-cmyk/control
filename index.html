@@ -239,28 +239,40 @@
         
         // ====== تم وضع بيانات Supabase الخاصة بك هنا جاهزة ======
         const SUPABASE_URL = "https://wefdqgyggkjgxibcknzf.supabase.co"; 
-        const SUPABASE_KEY = "sb_publishable_gf5527c7jZSNi4cu8S-yCw_tIlLy_HL"; 
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlZmRxZ3lnZ2tqZ3hpYmNrbnpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MzIxMzQsImV4cCI6MjEwODAwODEzNH0.TmCO8cpxNoeFpti5vPS8ClfAJ09SOS97eCxWHOgOc4I"; 
         // ======================================================
         
         const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentUser = null;
 
-        window.addEventListener('load', initApp);
+        // حماية: لو السيرفر بطيء، بعد 5 ثواني يخفي شاشة التحميل ويظهر تسجيل الدخول
+        setTimeout(() => {
+            const ls = document.getElementById('loading-screen');
+            if (ls && !ls.classList.contains('hidden')) {
+                ls.classList.add('hidden');
+                if (!currentUser) showAuth();
+            }
+        }, 5000);
 
         async function initApp() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-                currentUser = { session, profile };
-            }
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+                    currentUser = { session, profile };
+                }
 
-            const path = window.location.pathname;
-            if (path.includes('admin')) {
-                if (currentUser && currentUser.profile.role === 'admin') showDashboard('admin');
-                else showAuth('يرجى تسجيل الدخول كمدير للوصول إلى لوحة الإدارة');
-            } else {
-                if (currentUser) showDashboard(currentUser.profile.role);
-                else showPortal();
+                const path = window.location.pathname;
+                if (path.includes('admin')) {
+                    if (currentUser && currentUser.profile && currentUser.profile.role === 'admin') showDashboard('admin');
+                    else showAuth('يرجى تسجيل الدخول كمدير للوصول إلى لوحة الإدارة');
+                } else {
+                    if (currentUser && currentUser.profile) showDashboard(currentUser.profile.role);
+                    else showPortal();
+                }
+            } catch (e) {
+                console.error("Supabase Error:", e);
+                showAuth();
             }
         }
 
@@ -336,27 +348,31 @@
                 </div>
             `;
             
-            const { data: tasks } = await supabase.from('tasks').select('*, profiles:assigned_to(full_name)').order('created_at', { ascending: false }).limit(10);
-            const { data: calls } = await supabase.from('telesales_calls').select('*');
-            const { data: visits } = await supabase.from('field_visits').select('*');
-            
-            document.getElementById('stat-tasks').innerText = tasks?.length || 0;
-            document.getElementById('stat-done').innerText = tasks?.filter(t => t.status === 'completed').length || 0;
-            document.getElementById('stat-fail').innerText = tasks?.filter(t => t.status === 'unable').length || 0;
-            document.getElementById('stat-calls').innerText = calls?.length || 0;
-            document.getElementById('stat-visits').innerText = visits?.length || 0;
+            try {
+                const { data: tasks } = await supabase.from('tasks').select('*, profiles:assigned_to(full_name)').order('created_at', { ascending: false }).limit(10);
+                const { data: calls } = await supabase.from('telesales_calls').select('*');
+                const { data: visits } = await supabase.from('field_visits').select('*');
+                
+                document.getElementById('stat-tasks').innerText = tasks?.length || 0;
+                document.getElementById('stat-done').innerText = tasks?.filter(t => t.status === 'completed').length || 0;
+                document.getElementById('stat-fail').innerText = tasks?.filter(t => t.status === 'unable').length || 0;
+                document.getElementById('stat-calls').innerText = calls?.length || 0;
+                document.getElementById('stat-visits').innerText = visits?.length || 0;
 
-            if (tasks && tasks.length > 0) {
-                document.getElementById('admin-tasks-body').innerHTML = tasks.map(t => `
-                    <tr>
-                        <td><strong>${t.title}</strong></td>
-                        <td>${t.profiles?.full_name || 'غير محدد'}</td>
-                        <td><span class="status-badge status-${t.status}">${getArabicStatus(t.status)}</span></td>
-                        <td>${t.due_date ? new Date(t.due_date).toLocaleDateString('ar-EG') : '-'}</td>
-                    </tr>
-                `).join('');
-            } else {
-                document.getElementById('admin-tasks-body').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-gray);">لا توجد بيانات</td></tr>`;
+                if (tasks && tasks.length > 0) {
+                    document.getElementById('admin-tasks-body').innerHTML = tasks.map(t => `
+                        <tr>
+                            <td><strong>${t.title}</strong></td>
+                            <td>${t.profiles?.full_name || 'غير محدد'}</td>
+                            <td><span class="status-badge status-${t.status}">${getArabicStatus(t.status)}</span></td>
+                            <td>${t.due_date ? new Date(t.due_date).toLocaleDateString('ar-EG') : '-'}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    document.getElementById('admin-tasks-body').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-gray);">لا توجد بيانات</td></tr>`;
+                }
+            } catch (e) {
+                console.error("Admin fetch error:", e);
             }
         }
 
@@ -364,78 +380,82 @@
             document.getElementById('page-title').innerHTML = `لوحة تحكم <span>${currentUser.profile.full_name}</span>`;
             const content = document.getElementById('dashboard-content');
             
-            if (role === 'distributor') {
-                content.innerHTML = `
-                    <div class="table-container">
-                        <div class="table-header"><h3>مهام التوصيل</h3></div>
-                        <table class="data-table">
-                            <thead><tr><th>المهمة</th><th>العميل</th><th>الحالة</th><th>إجراء</th></tr></thead>
-                            <tbody id="emp-tasks-body"></tbody>
-                        </table>
-                    </div>`;
-                
-                const { data: tasks } = await supabase.from('tasks').select('*, customers(name)').eq('assigned_to', currentUser.profile.id);
-                if (tasks && tasks.length > 0) {
-                    document.getElementById('emp-tasks-body').innerHTML = tasks.map(t => `
-                        <tr>
-                            <td>${t.title}</td>
-                            <td>${t.customers?.name || '-'}</td>
-                            <td><span class="status-badge status-${t.status}">${getArabicStatus(t.status)}</span></td>
-                            <td>
-                                ${t.status !== 'completed' ? `
-                                <button class="action-btn btn-success" onclick="updateTask('${t.id}', 'completed')">إكمال</button>
-                                <button class="action-btn btn-danger" onclick="updateTask('${t.id}', 'unable')">تعذر</button>
-                                ` : 'مكتمل'}
-                            </td>
-                        </tr>
-                    `).join('');
-                } else {
-                    document.getElementById('emp-tasks-body').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-gray);">لا توجد مهام مخصصة لك</td></tr>`;
+            try {
+                if (role === 'distributor') {
+                    content.innerHTML = `
+                        <div class="table-container">
+                            <div class="table-header"><h3>مهام التوصيل</h3></div>
+                            <table class="data-table">
+                                <thead><tr><th>المهمة</th><th>العميل</th><th>الحالة</th><th>إجراء</th></tr></thead>
+                                <tbody id="emp-tasks-body"></tbody>
+                            </table>
+                        </div>`;
+                    
+                    const { data: tasks } = await supabase.from('tasks').select('*, customers(name)').eq('assigned_to', currentUser.profile.id);
+                    if (tasks && tasks.length > 0) {
+                        document.getElementById('emp-tasks-body').innerHTML = tasks.map(t => `
+                            <tr>
+                                <td>${t.title}</td>
+                                <td>${t.customers?.name || '-'}</td>
+                                <td><span class="status-badge status-${t.status}">${getArabicStatus(t.status)}</span></td>
+                                <td>
+                                    ${t.status !== 'completed' ? `
+                                    <button class="action-btn btn-success" onclick="updateTask('${t.id}', 'completed')">إكمال</button>
+                                    <button class="action-btn btn-danger" onclick="updateTask('${t.id}', 'unable')">تعذر</button>
+                                    ` : 'مكتمل'}
+                                </td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        document.getElementById('emp-tasks-body').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-gray);">لا توجد مهام مخصصة لك</td></tr>`;
+                    }
+                } else if (role === 'telesales') {
+                    content.innerHTML = `
+                        <div class="table-container">
+                            <div class="table-header"><h3>تسجيل المكالمات</h3><button class="btn-primary" style="width:auto; padding:10px 20px;" onclick="openModal('call')">+ مكالمة جديدة</button></div>
+                            <table class="data-table">
+                                <thead><tr><th>العميل</th><th>النتيجة</th><th>تم الطلب</th></tr></thead>
+                                <tbody id="emp-calls-body"></tbody>
+                            </table>
+                        </div>`;
+                    
+                    const { data: calls } = await supabase.from('telesales_calls').select('*, customers(name)').eq('employee_id', currentUser.profile.id).order('call_time', { ascending: false });
+                    if (calls && calls.length > 0) {
+                        document.getElementById('emp-calls-body').innerHTML = calls.map(c => `
+                            <tr>
+                                <td>${c.customers?.name || '-'}</td>
+                                <td>${c.result}</td>
+                                <td>${c.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        document.getElementById('emp-calls-body').innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-gray);">لا توجد مكالمات مسجلة</td></tr>`;
+                    }
+                } else if (role === 'field_sales') {
+                    content.innerHTML = `
+                        <div class="table-container">
+                            <div class="table-header"><h3>تسجيل الزيارات</h3><button class="btn-primary" style="width:auto; padding:10px 20px;" onclick="openModal('visit')">+ زيارة جديدة</button></div>
+                            <table class="data-table">
+                                <thead><tr><th>العميل</th><th>النتيجة</th><th>تم الطلب</th></tr></thead>
+                                <tbody id="emp-visits-body"></tbody>
+                            </table>
+                        </div>`;
+                    
+                    const { data: visits } = await supabase.from('field_visits').select('*, customers(name)').eq('employee_id', currentUser.profile.id).order('visit_date', { ascending: false });
+                    if (visits && visits.length > 0) {
+                        document.getElementById('emp-visits-body').innerHTML = visits.map(v => `
+                            <tr>
+                                <td>${v.customers?.name || '-'}</td>
+                                <td>${v.outcome}</td>
+                                <td>${v.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        document.getElementById('emp-visits-body').innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
+                    }
                 }
-            } else if (role === 'telesales') {
-                content.innerHTML = `
-                    <div class="table-container">
-                        <div class="table-header"><h3>تسجيل المكالمات</h3><button class="btn-primary" style="width:auto; padding:10px 20px;" onclick="openModal('call')">+ مكالمة جديدة</button></div>
-                        <table class="data-table">
-                            <thead><tr><th>العميل</th><th>النتيجة</th><th>تم الطلب</th></tr></thead>
-                            <tbody id="emp-calls-body"></tbody>
-                        </table>
-                    </div>`;
-                
-                const { data: calls } = await supabase.from('telesales_calls').select('*, customers(name)').eq('employee_id', currentUser.profile.id).order('call_time', { ascending: false });
-                if (calls && calls.length > 0) {
-                    document.getElementById('emp-calls-body').innerHTML = calls.map(c => `
-                        <tr>
-                            <td>${c.customers?.name || '-'}</td>
-                            <td>${c.result}</td>
-                            <td>${c.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    document.getElementById('emp-calls-body').innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-gray);">لا توجد مكالمات مسجلة</td></tr>`;
-                }
-            } else if (role === 'field_sales') {
-                content.innerHTML = `
-                    <div class="table-container">
-                        <div class="table-header"><h3>تسجيل الزيارات</h3><button class="btn-primary" style="width:auto; padding:10px 20px;" onclick="openModal('visit')">+ زيارة جديدة</button></div>
-                        <table class="data-table">
-                            <thead><tr><th>العميل</th><th>النتيجة</th><th>تم الطلب</th></tr></thead>
-                            <tbody id="emp-visits-body"></tbody>
-                        </table>
-                    </div>`;
-                
-                const { data: visits } = await supabase.from('field_visits').select('*, customers(name)').eq('employee_id', currentUser.profile.id).order('visit_date', { ascending: false });
-                if (visits && visits.length > 0) {
-                    document.getElementById('emp-visits-body').innerHTML = visits.map(v => `
-                        <tr>
-                            <td>${v.customers?.name || '-'}</td>
-                            <td>${v.outcome}</td>
-                            <td>${v.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    document.getElementById('emp-visits-body').innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
-                }
+            } catch (e) {
+                console.error("Employee fetch error:", e);
             }
         }
 
@@ -497,6 +517,8 @@
         window.switchView = (view) => {
             if (view === 'main') showDashboard(currentUser.profile.role);
         }
+
+        window.addEventListener('load', initApp);
     </script>
 </body>
 </html>
