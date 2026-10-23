@@ -118,7 +118,7 @@
         .stat-card .number.red { color: var(--danger); }
 
         .table-container {
-            background: var(--bg-charcoal); border-radius: 16px; border: 1px solid var(--border-color); overflow: hidden;
+            background: var(--bg-charcoal); border-radius: 16px; border: 1px solid var(--border-color); overflow: hidden; margin-bottom: 30px;
         }
         .table-header { padding: 20px 30px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
         .table-header h3 { font-size: 20px; font-weight: 700; }
@@ -244,12 +244,11 @@
         const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentUser = null;
 
-        // حماية: لو السيرفر بطيء، بعد 5 ثواني يخفي شاشة التحميل ويظهر البوابة الرئيسية
         setTimeout(() => {
             const ls = document.getElementById('loading-screen');
             if (ls && !ls.classList.contains('hidden')) {
                 ls.classList.add('hidden');
-                if (!currentUser) showPortal(); // تم الإصلاح هنا
+                if (!currentUser) showPortal();
             }
         }, 5000);
 
@@ -271,7 +270,7 @@
                 }
             } catch (e) {
                 console.error("Supabase Error:", e);
-                showPortal(); // تم الإصلاح هنا
+                showPortal();
             }
         }
 
@@ -338,6 +337,15 @@
                     <div class="stat-card"><h4>مكالمات التلي سيلز</h4><div class="number" id="stat-calls">0</div></div>
                     <div class="stat-card"><h4>زيارات المندوبين</h4><div class="number" id="stat-visits">0</div></div>
                 </div>
+                
+                <div class="table-container">
+                    <div class="table-header"><h3>آخر الزيارات الميدانية</h3></div>
+                    <table class="data-table">
+                        <thead><tr><th>الموظف</th><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>النتيجة</th><th>تم الطلب</th></tr></thead>
+                        <tbody id="admin-visits-body"></tbody>
+                    </table>
+                </div>
+
                 <div class="table-container">
                     <div class="table-header"><h3>آخر المهام المسجلة</h3></div>
                     <table class="data-table">
@@ -350,13 +358,28 @@
             try {
                 const { data: tasks } = await supabase.from('tasks').select('*, profiles:assigned_to(full_name)').order('created_at', { ascending: false }).limit(10);
                 const { data: calls } = await supabase.from('telesales_calls').select('*');
-                const { data: visits } = await supabase.from('field_visits').select('*');
+                const { data: visits } = await supabase.from('field_visits').select('*, profiles:employee_id(full_name)').order('id', { ascending: false }).limit(10);
                 
                 document.getElementById('stat-tasks').innerText = tasks?.length || 0;
                 document.getElementById('stat-done').innerText = tasks?.filter(t => t.status === 'completed').length || 0;
                 document.getElementById('stat-fail').innerText = tasks?.filter(t => t.status === 'unable').length || 0;
                 document.getElementById('stat-calls').innerText = calls?.length || 0;
                 document.getElementById('stat-visits').innerText = visits?.length || 0;
+
+                if (visits && visits.length > 0) {
+                    document.getElementById('admin-visits-body').innerHTML = visits.map(v => `
+                        <tr>
+                            <td>${v.profiles?.full_name || '-'}</td>
+                            <td>${v.customer_name || '-'}</td>
+                            <td>${v.customer_phone || '-'}</td>
+                            <td>${v.customer_address || '-'}</td>
+                            <td>${v.outcome}</td>
+                            <td>${v.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    document.getElementById('admin-visits-body').innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
+                }
 
                 if (tasks && tasks.length > 0) {
                     document.getElementById('admin-tasks-body').innerHTML = tasks.map(t => `
@@ -418,7 +441,7 @@
                             </table>
                         </div>`;
                     
-                    const { data: calls } = await supabase.from('telesales_calls').select('*, customers(name)').eq('employee_id', currentUser.profile.id).order('call_time', { ascending: false });
+                    const { data: calls } = await supabase.from('telesales_calls').select('*, customers(name)').eq('employee_id', currentUser.profile.id).order('id', { ascending: false });
                     if (calls && calls.length > 0) {
                         document.getElementById('emp-calls-body').innerHTML = calls.map(c => `
                             <tr>
@@ -440,7 +463,9 @@
                             </table>
                         </div>`;
                     
-                    const { data: visits } = await supabase.from('field_visits').select('*').eq('employee_id', currentUser.profile.id).order('visit_date', { ascending: false });
+                    const { data: visits, error: vError } = await supabase.from('field_visits').select('*').eq('employee_id', currentUser.profile.id).order('id', { ascending: false });
+                    if (vError) console.error("Fetch Visits Error:", vError);
+                    
                     if (visits && visits.length > 0) {
                         document.getElementById('emp-visits-body').innerHTML = visits.map(v => `
                             <tr>
@@ -504,7 +529,8 @@
             const result = document.getElementById('m-result').value;
             const notes = document.getElementById('m-notes').value;
             if (!customerId) return alert('اختر العميل');
-            await supabase.from('telesales_calls').insert([{ employee_id: empId, customer_id: customerId, result, order_placed: result === 'order_placed', notes }]);
+            const { error } = await supabase.from('telesales_calls').insert([{ employee_id: empId, customer_id: customerId, result, order_placed: result === 'order_placed', notes }]);
+            if (error) return alert('خطأ في الحفظ: ' + error.message);
             closeModal(); renderEmployee('telesales');
         }
 
@@ -515,7 +541,8 @@
             const outcome = document.getElementById('m-result').value;
             const notes = document.getElementById('m-notes').value;
             if (!custName) return alert('اكتب اسم العميل');
-            await supabase.from('field_visits').insert([{ 
+            
+            const { error } = await supabase.from('field_visits').insert([{ 
                 employee_id: empId, 
                 customer_name: custName, 
                 customer_phone: custPhone, 
@@ -524,7 +551,13 @@
                 order_placed: outcome === 'order_placed', 
                 notes 
             }]);
-            closeModal(); renderEmployee('field_sales');
+            
+            if (error) {
+                alert('خطأ في حفظ الزيارة: ' + error.message);
+            } else {
+                closeModal(); 
+                renderEmployee('field_sales');
+            }
         }
 
         window.switchView = (view) => {
