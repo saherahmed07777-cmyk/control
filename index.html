@@ -117,10 +117,16 @@
         .stat-card .number.green { color: var(--accent-green); }
         .stat-card .number.red { color: var(--danger); }
 
+        .admin-tabs { display: flex; gap: 10px; margin-bottom: 25px; flex-wrap: wrap; }
+        .tab-btn { padding: 10px 20px; background: var(--bg-charcoal); border: 1px solid var(--border-color); color: var(--text-white); border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+        .tab-btn:hover, .tab-btn.active { background: var(--primary-green); border-color: var(--primary-green); }
+
+        .search-box { width: 100%; max-width: 350px; padding: 12px 15px; background: var(--bg-black); border: 1px solid var(--border-color); color: var(--text-white); border-radius: 8px; margin-bottom: 15px; font-size: 16px; font-family: 'Cairo'; }
+
         .table-container {
             background: var(--bg-charcoal); border-radius: 16px; border: 1px solid var(--border-color); overflow: hidden; margin-bottom: 30px;
         }
-        .table-header { padding: 20px 30px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .table-header { padding: 20px 30px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; }
         .table-header h3 { font-size: 20px; font-weight: 700; }
         .data-table { width: 100%; border-collapse: collapse; }
         .data-table th { padding: 15px 30px; text-align: right; color: var(--text-gray); font-size: 14px; font-weight: 700; border-bottom: 1px solid var(--border-color); }
@@ -243,6 +249,7 @@
         
         const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentUser = null;
+        let currentTabData = []; // لتخزين بيانات التبويب الحالي للبحث
 
         setTimeout(() => {
             const ls = document.getElementById('loading-screen');
@@ -326,6 +333,9 @@
             return map[status] || status;
         }
 
+        // ===================================================
+        // لوحة تحكم الإدارة (مع التبويبات والبحث)
+        // ===================================================
         async function renderAdmin() {
             document.getElementById('page-title').innerHTML = 'لوحة تحكمات <span>الإدارة</span>';
             const content = document.getElementById('dashboard-content');
@@ -338,65 +348,205 @@
                     <div class="stat-card"><h4>زيارات المندوبين</h4><div class="number" id="stat-visits">0</div></div>
                 </div>
                 
-                <div class="table-container">
-                    <div class="table-header"><h3>آخر الزيارات الميدانية</h3></div>
-                    <table class="data-table">
-                        <thead><tr><th>الموظف</th><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>تم الطلب</th></tr></thead>
-                        <tbody id="admin-visits-body"></tbody>
-                    </table>
+                <div class="admin-tabs">
+                    <button class="tab-btn active" onclick="renderAdminFieldSales()">🗺️ قسم المندوب الأرضي</button>
+                    <button class="tab-btn" onclick="renderAdminTelesales()">📞 قسم التلي سيلز</button>
+                    <button class="tab-btn" onclick="renderAdminTasks()">🚚 قسم التوزيع</button>
                 </div>
-
-                <div class="table-container">
-                    <div class="table-header"><h3>آخر المهام المسجلة</h3></div>
-                    <table class="data-table">
-                        <thead><tr><th>المهمة</th><th>الموظف</th><th>الحالة</th><th>الاستحقاق</th></tr></thead>
-                        <tbody id="admin-tasks-body"></tbody>
-                    </table>
-                </div>
+                <div id="admin-tab-content"></div>
             `;
             
             try {
-                const { data: tasks } = await supabase.from('tasks').select('*, profiles:assigned_to(full_name)').order('created_at', { ascending: false }).limit(10);
+                const { data: tasks } = await supabase.from('tasks').select('*');
                 const { data: calls } = await supabase.from('telesales_calls').select('*');
-                const { data: visits } = await supabase.from('field_visits').select('*, profiles:employee_id(full_name)').order('id', { ascending: false }).limit(10);
+                const { data: visits } = await supabase.from('field_visits').select('*');
                 
                 document.getElementById('stat-tasks').innerText = tasks?.length || 0;
                 document.getElementById('stat-done').innerText = tasks?.filter(t => t.status === 'completed').length || 0;
                 document.getElementById('stat-fail').innerText = tasks?.filter(t => t.status === 'unable').length || 0;
                 document.getElementById('stat-calls').innerText = calls?.length || 0;
                 document.getElementById('stat-visits').innerText = visits?.length || 0;
-
-                if (visits && visits.length > 0) {
-                    document.getElementById('admin-visits-body').innerHTML = visits.map(v => `
-                        <tr>
-                            <td>${v.profiles?.full_name || '-'}</td>
-                            <td>${v.customer_name || '-'}</td>
-                            <td>${v.customer_phone || '-'}</td>
-                            <td>${v.customer_address || '-'}</td>
-                            <td>${v.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    document.getElementById('admin-visits-body').innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
-                }
-
-                if (tasks && tasks.length > 0) {
-                    document.getElementById('admin-tasks-body').innerHTML = tasks.map(t => `
-                        <tr>
-                            <td><strong>${t.title}</strong></td>
-                            <td>${t.profiles?.full_name || 'غير محدد'}</td>
-                            <td><span class="status-badge status-${t.status}">${getArabicStatus(t.status)}</span></td>
-                            <td>${t.due_date ? new Date(t.due_date).toLocaleDateString('ar-EG') : '-'}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    document.getElementById('admin-tasks-body').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-gray);">لا توجد بيانات</td></tr>`;
-                }
             } catch (e) {
-                console.error("Admin fetch error:", e);
+                console.error("Admin stats fetch error:", e);
             }
+
+            renderAdminFieldSales(); // فتح تبويب المندوب الأرضي تلقائياً
         }
 
+        window.renderAdminFieldSales = async () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            const tabContent = document.getElementById('admin-tab-content');
+            tabContent.innerHTML = `<p style="text-align:center; color:var(--text-gray);">جاري تحميل الزيارات...</p>`;
+
+            try {
+                const { data: visits, error: vError } = await supabase.from('field_visits').select('*').order('id', { ascending: false });
+                const { data: profiles } = await supabase.from('profiles').select('*');
+                
+                if (vError) throw vError;
+
+                currentTabData = (visits || []).map(v => {
+                    const emp = profiles?.find(p => p.id === v.employee_id);
+                    return { ...v, employee_name: emp?.full_name || 'غير محدد' };
+                });
+
+                tabContent.innerHTML = `
+                    <div class="table-container">
+                        <div class="table-header" style="flex-direction: column; align-items: stretch;">
+                            <h3>سجل زيارات المندوب الأرضي</h3>
+                            <input type="text" id="search-visits" class="search-box" placeholder="🔍 ابحث باسم العميل..." oninput="filterAdminVisits()">
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>الموظف</th><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>تاريخ الزيارة</th><th>تم الطلب</th></tr></thead>
+                            <tbody id="admin-visits-body"></tbody>
+                        </table>
+                    </div>
+                `;
+                filterAdminVisits();
+            } catch (e) {
+                console.error("Visits fetch error:", e);
+                tabContent.innerHTML = `<p style="text-align:center; color:var(--danger);">حدث خطأ أثناء جلب الزيارات.</p>`;
+            }
+        };
+
+        window.filterAdminVisits = () => {
+            const term = (document.getElementById('search-visits')?.value || '').toLowerCase();
+            const filtered = currentTabData.filter(v => (v.customer_name || '').toLowerCase().includes(term));
+            const body = document.getElementById('admin-visits-body');
+            if (!body) return;
+
+            if (filtered.length > 0) {
+                body.innerHTML = filtered.map(v => `
+                    <tr>
+                        <td>${v.employee_name}</td>
+                        <td>${v.customer_name || '-'}</td>
+                        <td>${v.customer_phone || '-'}</td>
+                        <td>${v.customer_address || '-'}</td>
+                        <td>${v.visit_date ? new Date(v.visit_date).toLocaleString('ar-EG') : '-'}</td>
+                        <td>${v.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                body.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
+            }
+        };
+
+        window.renderAdminTelesales = async () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            const tabContent = document.getElementById('admin-tab-content');
+            tabContent.innerHTML = `<p style="text-align:center; color:var(--text-gray);">جاري تحميل المكالمات...</p>`;
+
+            try {
+                const { data: calls, error: cError } = await supabase.from('telesales_calls').select('*, customers(name)').order('id', { ascending: false });
+                const { data: profiles } = await supabase.from('profiles').select('*');
+                
+                if (cError) throw cError;
+
+                currentTabData = (calls || []).map(c => {
+                    const emp = profiles?.find(p => p.id === c.employee_id);
+                    return { ...c, employee_name: emp?.full_name || 'غير محدد' };
+                });
+
+                tabContent.innerHTML = `
+                    <div class="table-container">
+                        <div class="table-header" style="flex-direction: column; align-items: stretch;">
+                            <h3>سجل مكالمات التلي سيلز</h3>
+                            <input type="text" id="search-calls" class="search-box" placeholder="🔍 ابحث باسم العميل..." oninput="filterAdminCalls()">
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>الموظف</th><th>العميل</th><th>النتيجة</th><th>تم الطلب</th></tr></thead>
+                            <tbody id="admin-calls-body"></tbody>
+                        </table>
+                    </div>
+                `;
+                filterAdminCalls();
+            } catch (e) {
+                console.error("Calls fetch error:", e);
+                tabContent.innerHTML = `<p style="text-align:center; color:var(--danger);">حدث خطأ أثناء جلب المكالمات.</p>`;
+            }
+        };
+
+        window.filterAdminCalls = () => {
+            const term = (document.getElementById('search-calls')?.value || '').toLowerCase();
+            const filtered = currentTabData.filter(c => (c.customers?.name || '').toLowerCase().includes(term));
+            const body = document.getElementById('admin-calls-body');
+            if (!body) return;
+
+            if (filtered.length > 0) {
+                body.innerHTML = filtered.map(c => `
+                    <tr>
+                        <td>${c.employee_name}</td>
+                        <td>${c.customers?.name || '-'}</td>
+                        <td>${c.result}</td>
+                        <td>${c.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                body.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-gray);">لا توجد مكالمات مسجلة</td></tr>`;
+            }
+        };
+
+        window.renderAdminTasks = async () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            const tabContent = document.getElementById('admin-tab-content');
+            tabContent.innerHTML = `<p style="text-align:center; color:var(--text-gray);">جاري تحميل المهام...</p>`;
+
+            try {
+                const { data: tasks, error: tError } = await supabase.from('tasks').select('*, customers(name)').order('created_at', { ascending: false });
+                const { data: profiles } = await supabase.from('profiles').select('*');
+
+                if (tError) throw tError;
+
+                currentTabData = (tasks || []).map(t => {
+                    const emp = profiles?.find(p => p.id === t.assigned_to);
+                    return { ...t, employee_name: emp?.full_name || 'غير محدد' };
+                });
+
+                tabContent.innerHTML = `
+                    <div class="table-container">
+                        <div class="table-header" style="flex-direction: column; align-items: stretch;">
+                            <h3>سجل مهام التوزيع</h3>
+                            <input type="text" id="search-tasks" class="search-box" placeholder="🔍 ابحث باسم العميل..." oninput="filterAdminTasks()">
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>الموظف</th><th>المهمة</th><th>العميل</th><th>الحالة</th><th>الاستحقاق</th></tr></thead>
+                            <tbody id="admin-tasks-body"></tbody>
+                        </table>
+                    </div>
+                `;
+                filterAdminTasks();
+            } catch (e) {
+                console.error("Tasks fetch error:", e);
+                tabContent.innerHTML = `<p style="text-align:center; color:var(--danger);">حدث خطأ أثناء جلب المهام.</p>`;
+            }
+        };
+
+        window.filterAdminTasks = () => {
+            const term = (document.getElementById('search-tasks')?.value || '').toLowerCase();
+            const filtered = currentTabData.filter(t => (t.customers?.name || '').toLowerCase().includes(term));
+            const body = document.getElementById('admin-tasks-body');
+            if (!body) return;
+
+            if (filtered.length > 0) {
+                body.innerHTML = filtered.map(t => `
+                    <tr>
+                        <td>${t.employee_name}</td>
+                        <td><strong>${t.title}</strong></td>
+                        <td>${t.customers?.name || '-'}</td>
+                        <td><span class="status-badge status-${t.status}">${getArabicStatus(t.status)}</span></td>
+                        <td>${t.due_date ? new Date(t.due_date).toLocaleDateString('ar-EG') : '-'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                body.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-gray);">لا توجد مهام مسجلة</td></tr>`;
+            }
+        };
+
+        // ===================================================
+        // لوحات الموظفين
+        // ===================================================
         async function renderEmployee(role) {
             document.getElementById('page-title').innerHTML = `لوحة تحكم تري فارما - <span>${currentUser.profile.full_name}</span>`;
             const content = document.getElementById('dashboard-content');
@@ -457,7 +607,7 @@
                         <div class="table-container">
                             <div class="table-header"><h3>تسجيل الزيارات</h3><button class="btn-primary" style="width:auto; padding:10px 20px;" onclick="openModal('visit')">+ زيارة جديدة</button></div>
                             <table class="data-table">
-                                <thead><tr><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>تم الطلب</th></tr></thead>
+                                <thead><tr><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>تاريخ الزيارة</th><th>تم الطلب</th></tr></thead>
                                 <tbody id="emp-visits-body"></tbody>
                             </table>
                         </div>`;
@@ -471,11 +621,12 @@
                                 <td>${v.customer_name || '-'}</td>
                                 <td>${v.customer_phone || '-'}</td>
                                 <td>${v.customer_address || '-'}</td>
+                                <td>${v.visit_date ? new Date(v.visit_date).toLocaleString('ar-EG') : '-'}</td>
                                 <td>${v.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
                             </tr>
                         `).join('');
                     } else {
-                        document.getElementById('emp-visits-body').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
+                        document.getElementById('emp-visits-body').innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
                     }
                 }
             } catch (e) {
