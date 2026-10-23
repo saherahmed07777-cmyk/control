@@ -327,7 +327,7 @@
         }
 
         async function renderAdmin() {
-            document.getElementById('page-title').innerHTML = 'لوحة تحليلات <span>الإدارة</span>';
+            document.getElementById('page-title').innerHTML = 'لوحة تحكمات <span>الإدارة</span>';
             const content = document.getElementById('dashboard-content');
             content.innerHTML = `
                 <div class="stats-grid">
@@ -341,7 +341,7 @@
                 <div class="table-container">
                     <div class="table-header"><h3>آخر الزيارات الميدانية</h3></div>
                     <table class="data-table">
-                        <thead><tr><th>الموظف</th><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>النتيجة</th><th>تم الطلب</th></tr></thead>
+                        <thead><tr><th>الموظف</th><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>تم الطلب</th></tr></thead>
                         <tbody id="admin-visits-body"></tbody>
                     </table>
                 </div>
@@ -373,12 +373,11 @@
                             <td>${v.customer_name || '-'}</td>
                             <td>${v.customer_phone || '-'}</td>
                             <td>${v.customer_address || '-'}</td>
-                            <td>${v.outcome}</td>
                             <td>${v.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
                         </tr>
                     `).join('');
                 } else {
-                    document.getElementById('admin-visits-body').innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
+                    document.getElementById('admin-visits-body').innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
                 }
 
                 if (tasks && tasks.length > 0) {
@@ -399,7 +398,7 @@
         }
 
         async function renderEmployee(role) {
-            document.getElementById('page-title').innerHTML = `لوحة تحكم <span>${currentUser.profile.full_name}</span>`;
+            document.getElementById('page-title').innerHTML = `لوحة تحكم تري فارما - <span>${currentUser.profile.full_name}</span>`;
             const content = document.getElementById('dashboard-content');
             
             try {
@@ -458,7 +457,7 @@
                         <div class="table-container">
                             <div class="table-header"><h3>تسجيل الزيارات</h3><button class="btn-primary" style="width:auto; padding:10px 20px;" onclick="openModal('visit')">+ زيارة جديدة</button></div>
                             <table class="data-table">
-                                <thead><tr><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>النتيجة</th><th>تم الطلب</th></tr></thead>
+                                <thead><tr><th>العميل</th><th>الموبيل</th><th>العنوان</th><th>تم الطلب</th></tr></thead>
                                 <tbody id="emp-visits-body"></tbody>
                             </table>
                         </div>`;
@@ -472,12 +471,11 @@
                                 <td>${v.customer_name || '-'}</td>
                                 <td>${v.customer_phone || '-'}</td>
                                 <td>${v.customer_address || '-'}</td>
-                                <td>${v.outcome}</td>
                                 <td>${v.order_placed ? '<span style="color:#4ade80; font-weight:bold;">نعم</span>' : 'لا'}</td>
                             </tr>
                         `).join('');
                     } else {
-                        document.getElementById('emp-visits-body').innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
+                        document.getElementById('emp-visits-body').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-gray);">لا توجد زيارات مسجلة</td></tr>`;
                     }
                 }
             } catch (e) {
